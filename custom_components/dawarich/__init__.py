@@ -1,10 +1,8 @@
 """The Dawarich integration."""
 
-import json
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
-from pathlib import Path
 from typing import Any
 
 from dawarich_api import DawarichAPI
@@ -31,8 +29,6 @@ from .const import (
 from .coordinator import DawarichStatsCoordinator, DawarichVersionCoordinator
 from .helpers import get_api
 from .zone_sync import async_sync_zones, is_auto_sync_enabled
-
-VERSION = json.loads((Path(__file__).parent / "manifest.json").read_text())["version"]
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
