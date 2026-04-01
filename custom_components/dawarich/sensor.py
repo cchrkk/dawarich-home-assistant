@@ -9,9 +9,10 @@ from homeassistant.components.sensor.const import SensorDeviceClass, SensorState
 from homeassistant.const import (
     CONF_HOST,
     CONF_NAME,
+    STATE_NOT_HOME,
     UnitOfLength,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, State, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
@@ -123,16 +124,16 @@ async def async_setup_entry(
         )
     )
 
-    # Add (optional) mobile app tracker sensor
-    mobile_app = entry.data[CONF_DEVICE]
-    if mobile_app is not None:
-        _LOGGER.info("Adding tracker sensor for %s", mobile_app)
+    # Add optional tracker/person sensor
+    tracked_entity = entry.data[CONF_DEVICE]
+    if tracked_entity is not None:
+        _LOGGER.info("Adding tracker sensor for %s", tracked_entity)
         api = entry.runtime_data.api
         sensors.append(
             DawarichTrackerSensor(
                 entry_id=entry_id,
                 device_name=name,
-                mobile_app=mobile_app,
+                tracked_entity=tracked_entity,
                 api=api,
                 hass=hass,
                 device_info=device_info,
@@ -140,7 +141,7 @@ async def async_setup_entry(
             )
         )
     else:
-        _LOGGER.info("No mobile device provided, skipping tracker sensor")
+        _LOGGER.info("No tracked entity provided, skipping tracker sensor")
 
     async_add_entities(sensors)
 
@@ -152,7 +153,7 @@ class DawarichTrackerSensor(SensorEntity):
         self,
         entry_id: str,
         device_name: str,
-        mobile_app: str,
+        tracked_entity: str,
         api: DawarichAPI,
         hass: HomeAssistant,
         device_info: DeviceInfo,
@@ -160,7 +161,7 @@ class DawarichTrackerSensor(SensorEntity):
     ) -> None:
         """Initialize the sensor."""
         self._device_name = device_name
-        self._mobile_app = mobile_app
+        self._tracked_entity = tracked_entity
         self._entry_id = entry_id
         self._hass = hass
         self._api = api
@@ -168,10 +169,12 @@ class DawarichTrackerSensor(SensorEntity):
         self._attr_device_class = description.device_class
         self.entity_description = description
         self._repair_issue_created = False
+        self._last_uploaded_zone: str | None = None
+        self._last_uploaded_coordinates: tuple[float, float] | None = None
 
         self._async_unsubscribe_state_changed = async_track_state_change_event(
             hass=self._hass,
-            entity_ids=[self._mobile_app],
+            entity_ids=[self._tracked_entity],
             action=self._async_update_callback,
         )
         self._state: DawarichTrackerStates = DawarichTrackerStates.UNKNOWN
@@ -180,7 +183,7 @@ class DawarichTrackerSensor(SensorEntity):
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to hass."""
         # Check initial state of the tracked entity
-        initial_state = self._hass.states.get(self._mobile_app)
+        initial_state = self._hass.states.get(self._tracked_entity)
         self._async_check_entity_availability(initial_state)
 
     @property
@@ -197,8 +200,8 @@ class DawarichTrackerSensor(SensorEntity):
         if state is None or state.state in ("unavailable", "unknown"):
             if not self._repair_issue_created:
                 _LOGGER.warning(
-                    "Device tracker %s is not available. Please check the entity.",
-                    self._mobile_app,
+                    "Tracked entity %s is not available. Please check the entity.",
+                    self._tracked_entity,
                 )
                 async_create_issue(
                     self._hass,
@@ -208,7 +211,7 @@ class DawarichTrackerSensor(SensorEntity):
                     severity=IssueSeverity.WARNING,
                     translation_key="device_tracker_unavailable",
                     translation_placeholders={
-                        "device_tracker": self._mobile_app,
+                        "device_tracker": self._tracked_entity,
                         "device_name": self._device_name,
                     },
                 )
@@ -216,8 +219,8 @@ class DawarichTrackerSensor(SensorEntity):
             return False
         if self._repair_issue_created:
             _LOGGER.info(
-                "Device tracker %s is available again, clearing repair issue.",
-                self._mobile_app,
+                "Tracked entity %s is available again, clearing repair issue.",
+                self._tracked_entity,
             )
             async_delete_issue(self._hass, DOMAIN, self._issue_id)
             self._repair_issue_created = False
@@ -250,7 +253,7 @@ class DawarichTrackerSensor(SensorEntity):
             return
 
         _LOGGER.debug(
-            "State change detected for %s, updating Dawarich", self._mobile_app
+            "State change detected for %s, updating Dawarich", self._tracked_entity
         )
         new_state = event.data.get("new_state")
 
@@ -258,7 +261,7 @@ class DawarichTrackerSensor(SensorEntity):
             return
 
         if new_state is None:
-            _LOGGER.error("No new state found for %s", self._mobile_app)
+            _LOGGER.error("No new state found for %s", self._tracked_entity)
             return
 
         # Log received data
@@ -278,10 +281,27 @@ class DawarichTrackerSensor(SensorEntity):
                         "source type which typically does not have coordinates. "
                         "Please change the device tracker to one that provides GPS coordinates."
                     ),
-                    self._mobile_app,
+                    self._tracked_entity,
                     new_data.get("source"),
                 )
             _LOGGER.debug("Coordinates are not present, skipping update")
+            return
+
+        current_zone = self._async_get_zone_name(new_state)
+        if current_zone is not None and current_zone == self._last_uploaded_zone:
+            _LOGGER.debug(
+                "Tracked entity %s is still in zone %s, skipping duplicate update",
+                self._tracked_entity,
+                current_zone,
+            )
+            return
+
+        coordinates = (float(latitude), float(longitude))
+        if current_zone is None and coordinates == self._last_uploaded_coordinates:
+            _LOGGER.debug(
+                "Tracked entity %s reported unchanged coordinates, skipping duplicate update",
+                self._tracked_entity,
+            )
             return
 
         optional_params = await self._async_add_optional_params(new_data)
@@ -296,6 +316,8 @@ class DawarichTrackerSensor(SensorEntity):
         if response.success:
             _LOGGER.debug("Location sent to Dawarich API")
             self._state = DawarichTrackerStates.SUCCESS
+            self._last_uploaded_zone = current_zone
+            self._last_uploaded_coordinates = coordinates
         else:
             self._state = DawarichTrackerStates.ERROR
             _LOGGER.error(
@@ -303,6 +325,27 @@ class DawarichTrackerSensor(SensorEntity):
                 response.response_code,
                 response.error,
             )
+
+    @callback
+    def _async_get_zone_name(self, state: State) -> str | None:
+        """Return the current Home Assistant zone name for the tracked entity."""
+        if state.state in ("unknown", "unavailable", STATE_NOT_HOME):
+            return None
+
+        normalized_state = state.state.casefold()
+        for zone_state in self._hass.states.async_all("zone"):
+            zone_names = {
+                zone_state.entity_id.split(".", maxsplit=1)[1].casefold(),
+                zone_state.name.casefold(),
+            }
+            friendly_name = zone_state.attributes.get("friendly_name")
+            if isinstance(friendly_name, str):
+                zone_names.add(friendly_name.casefold())
+
+            if normalized_state in zone_names:
+                return zone_state.entity_id
+
+        return None
 
     async def _async_add_optional_params(self, new_data: dict) -> dict:
         # Only include optional parameters if they have valid values
@@ -380,13 +423,13 @@ class DawarichTrackerSensor(SensorEntity):
         if device.disabled:
             _LOGGER.debug(
                 "State change detected for %s, however, Dawarich device is disabled, not updating.",
-                self._mobile_app,
+                self._tracked_entity,
             )
             return True
         if entity_entry.disabled:
             _LOGGER.debug(
                 "State change detected for %s, however, Dawarich tracker sensor is disabled, not updating.",
-                self._mobile_app,
+                self._tracked_entity,
             )
             return True
         return False

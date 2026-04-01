@@ -1,6 +1,6 @@
 [project]
 name = "dawarich-home-assistant"
-version = "0.1.0"
+version = "1.0.0b3"
 description = ""
 authors = [{ name = "Albin Lindqvist", email = "albin.lindqvist@hotmail.se" }]
 readme = "README.md"

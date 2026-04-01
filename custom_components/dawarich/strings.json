@@ -8,7 +8,7 @@
           "host": "[%key:common::config_flow::data::host%]",
           "port": "[%key:common::config_flow::data::port%]",
           "name": "Name",
-          "mobile_app": "Device Tracker",
+          "mobile_app": "Tracked Entity",
           "ssl": "Use SSL (i.e. https)",
           "verify_ssl": "Verify SSL"
         }
@@ -34,7 +34,7 @@
           "host": "[%key:common::config_flow::data::host%]",
           "port": "[%key:common::config_flow::data::port%]",
           "name": "Name",
-          "mobile_app": "Device Tracker",
+          "mobile_app": "Tracked Entity",
           "ssl": "Use SSL (i.e. https)",
           "verify_ssl": "Verify SSL",
           "api_key": "API Key (leave empty to keep current)"
@@ -55,7 +55,7 @@
   "issues": {
     "device_tracker_unavailable": {
       "title": "Device tracker unavailable",
-      "description": "The device tracker `{device_tracker}` configured for {device_name} is not available. This may be because the entity has been removed or the integration providing it is not loaded. Please check the entity or reconfigure the Dawarich integration to use a different device tracker."
+      "description": "The tracked entity `{device_tracker}` configured for {device_name} is not available. This may be because the entity has been removed or the integration providing it is not loaded. Please check the entity or reconfigure the Dawarich integration to use a different tracked entity."
     },
     "api_unavailable": {
       "title": "Dawarich API unavailable",

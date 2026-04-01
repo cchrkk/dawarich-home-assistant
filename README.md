@@ -24,7 +24,9 @@
 
 This integration does two things, one of which is optional.
 1. It provides statistics for your account. This includes total distance, number of cities visited, current Dawarich version, and more.
-2. (optional) You can set a device tracker (such as a mobile phone) to send its data through Home Assistant to Dawarich. This way, you don't need another app and can instead use any existing location entities in Home Assistant.
+2. (optional) You can set a tracked entity to send its data through Home Assistant to Dawarich. This can be either a `device_tracker.*` entity or a `person.*` entity backed by Home Assistant presence tracking.
+
+When a tracked entity is inside a Home Assistant zone such as `home`, the integration sends a point when entering the zone and then suppresses repeated updates while the entity remains in that same zone.
 
 ## Install
 There are two ways to install this. The easiest is with [HACS](https://hacs.xyz/).
@@ -71,7 +73,7 @@ Below are the configuration options for the Dawarich Home Assistant integration.
 - **Host:** hostname, IP address, or URL that resolves to the running Dawarich instance
 - **Port:** port number for host
 - **Name:** integration entry category to contain devices
-- **Device Tracker:** device tracker to send data to Dawarich
+- **Tracked Entity:** `device_tracker.*` or `person.*` entity to send data to Dawarich
 - **Use SSL:** check to use HTTPS (i.e. prepends url with `https`)
 - **Verify SSL:** make sure secure connection is made through SSL
 
