@@ -17,10 +17,15 @@ from homeassistant.const import (
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_AUTO_SYNC_ZONES,
     CONF_DEVICE,
+    CONF_SYNC_ZONE_INTERVAL,
+    CONF_SYNC_ZONES,
+    DEFAULT_AUTO_SYNC_ZONES,
     DEFAULT_NAME,
     DEFAULT_PORT,
     DEFAULT_SSL,
+    DEFAULT_SYNC_ZONE_INTERVAL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
 )
@@ -33,6 +38,13 @@ class DawarichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Dawarich."""
 
     VERSION = 2
+
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> DawarichOptionsFlow:
+        """Create the options flow."""
+        return DawarichOptionsFlow(config_entry)
 
     def __init__(self) -> None:
         """Initialize Dawarich config flow."""
@@ -52,6 +64,13 @@ class DawarichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_SSL: user_input[CONF_SSL],
                 CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
                 CONF_DEVICE: user_input.get(CONF_DEVICE),
+                CONF_AUTO_SYNC_ZONES: user_input.get(
+                    CONF_AUTO_SYNC_ZONES, DEFAULT_AUTO_SYNC_ZONES
+                ),
+                CONF_SYNC_ZONE_INTERVAL: user_input.get(
+                    CONF_SYNC_ZONE_INTERVAL, DEFAULT_SYNC_ZONE_INTERVAL
+                ),
+                CONF_SYNC_ZONES: user_input.get(CONF_SYNC_ZONES, []),
             }
 
             self._async_abort_entries_match(
@@ -95,6 +114,25 @@ class DawarichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_VERIFY_SSL,
                         default=user_input.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
                     ): bool,
+                    vol.Required(
+                        CONF_AUTO_SYNC_ZONES,
+                        default=user_input.get(
+                            CONF_AUTO_SYNC_ZONES, DEFAULT_AUTO_SYNC_ZONES
+                        ),
+                    ): bool,
+                    vol.Required(
+                        CONF_SYNC_ZONE_INTERVAL,
+                        default=user_input.get(
+                            CONF_SYNC_ZONE_INTERVAL, DEFAULT_SYNC_ZONE_INTERVAL
+                        ),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=168)),
+                    vol.Optional(CONF_SYNC_ZONES): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=self._get_zone_options(),
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                 }
             ),
             errors=errors,
@@ -216,6 +254,20 @@ class DawarichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL],
                 CONF_DEVICE: user_input.get(CONF_DEVICE),
                 CONF_API_KEY: new_api_key,
+                CONF_AUTO_SYNC_ZONES: user_input.get(
+                    CONF_AUTO_SYNC_ZONES,
+                    current_data.get(CONF_AUTO_SYNC_ZONES, DEFAULT_AUTO_SYNC_ZONES),
+                ),
+                CONF_SYNC_ZONE_INTERVAL: user_input.get(
+                    CONF_SYNC_ZONE_INTERVAL,
+                    current_data.get(
+                        CONF_SYNC_ZONE_INTERVAL, DEFAULT_SYNC_ZONE_INTERVAL
+                    ),
+                ),
+                CONF_SYNC_ZONES: user_input.get(
+                    CONF_SYNC_ZONES,
+                    current_data.get(CONF_SYNC_ZONES, []),
+                ),
             }
 
             # Test the connection with new settings
@@ -233,6 +285,13 @@ class DawarichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_NAME: current_data.get(CONF_NAME, DEFAULT_NAME),
                 CONF_SSL: current_data.get(CONF_SSL, DEFAULT_SSL),
                 CONF_VERIFY_SSL: current_data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                CONF_AUTO_SYNC_ZONES: current_data.get(
+                    CONF_AUTO_SYNC_ZONES, DEFAULT_AUTO_SYNC_ZONES
+                ),
+                CONF_SYNC_ZONE_INTERVAL: current_data.get(
+                    CONF_SYNC_ZONE_INTERVAL, DEFAULT_SYNC_ZONE_INTERVAL
+                ),
+                CONF_SYNC_ZONES: current_data.get(CONF_SYNC_ZONES, []),
             }
 
         return self.async_show_form(
@@ -267,6 +326,26 @@ class DawarichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_VERIFY_SSL,
                         default=user_input.get(CONF_VERIFY_SSL),
                     ): bool,
+                    vol.Required(
+                        CONF_AUTO_SYNC_ZONES,
+                        default=user_input.get(CONF_AUTO_SYNC_ZONES),
+                    ): bool,
+                    vol.Required(
+                        CONF_SYNC_ZONE_INTERVAL,
+                        default=user_input.get(CONF_SYNC_ZONE_INTERVAL),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=168)),
+                    vol.Optional(
+                        CONF_SYNC_ZONES,
+                        description={
+                            "suggested_value": current_data.get(CONF_SYNC_ZONES, [])
+                        },
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=self._get_zone_options(),
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                     vol.Optional(
                         CONF_API_KEY,
                         description={"suggested_value": ""},
@@ -302,3 +381,77 @@ class DawarichConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return {CONF_API_KEY: "invalid api key"}
             case _:
                 return {"base": "connection_error"}
+
+    def _get_zone_options(self) -> list[selector.SelectOptionDict]:
+        """Return selectable Home Assistant zones."""
+        return [
+            selector.SelectOptionDict(value=zone.entity_id, label=zone.name)
+            for zone in self.hass.states.async_all("zone")
+        ]
+
+
+class DawarichOptionsFlow(config_entries.OptionsFlow):
+    """Handle Dawarich options."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self._config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Manage the Dawarich options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_options = {
+            CONF_AUTO_SYNC_ZONES: self._config_entry.options.get(
+                CONF_AUTO_SYNC_ZONES,
+                self._config_entry.data.get(
+                    CONF_AUTO_SYNC_ZONES, DEFAULT_AUTO_SYNC_ZONES
+                ),
+            ),
+            CONF_SYNC_ZONE_INTERVAL: self._config_entry.options.get(
+                CONF_SYNC_ZONE_INTERVAL,
+                self._config_entry.data.get(
+                    CONF_SYNC_ZONE_INTERVAL, DEFAULT_SYNC_ZONE_INTERVAL
+                ),
+            ),
+            CONF_SYNC_ZONES: self._config_entry.options.get(
+                CONF_SYNC_ZONES,
+                self._config_entry.data.get(CONF_SYNC_ZONES, []),
+            ),
+        }
+
+        zone_options = [
+            selector.SelectOptionDict(value=zone.entity_id, label=zone.name)
+            for zone in self.hass.states.async_all("zone")
+        ]
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_AUTO_SYNC_ZONES,
+                        default=current_options[CONF_AUTO_SYNC_ZONES],
+                    ): bool,
+                    vol.Required(
+                        CONF_SYNC_ZONE_INTERVAL,
+                        default=current_options[CONF_SYNC_ZONE_INTERVAL],
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=168)),
+                    vol.Optional(
+                        CONF_SYNC_ZONES,
+                        description={
+                            "suggested_value": current_options[CONF_SYNC_ZONES]
+                        },
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=zone_options,
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+        )

@@ -28,6 +28,10 @@ This integration does two things, one of which is optional.
 
 When a tracked entity is inside a Home Assistant zone such as `home`, the integration sends a point when entering the zone and then suppresses repeated updates while the entity remains in that same zone.
 
+The integration also exposes a button entity called `Sync Home Assistant Zones` that creates or updates Dawarich areas from your Home Assistant zones. Synchronization matches by zone name and does not delete areas that only exist in Dawarich.
+
+Zone sync can also be configured from the integration options so it runs automatically on a configurable interval, and you can restrict synchronization to a selected subset of `zone.*` entities.
+
 ## Install
 There are two ways to install this. The easiest is with [HACS](https://hacs.xyz/).
 
@@ -76,6 +80,13 @@ Below are the configuration options for the Dawarich Home Assistant integration.
 - **Tracked Entity:** `device_tracker.*` or `person.*` entity to send data to Dawarich
 - **Use SSL:** check to use HTTPS (i.e. prepends url with `https`)
 - **Verify SSL:** make sure secure connection is made through SSL
+
+After setup, you can press the `Sync Home Assistant Zones` button entity from Home Assistant to push the configured zones to Dawarich areas.
+
+From the integration options, you can:
+- enable or disable automatic zone sync
+- set the automatic sync interval in hours
+- choose which Home Assistant zones should be synchronized
 
 ## Known Issues
 Below are some known issues that are being looked at, but with workarounds for the moment.

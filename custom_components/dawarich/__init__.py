@@ -3,7 +3,9 @@
 import json
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 from dawarich_api import DawarichAPI
 from homeassistant import config_entries
@@ -17,15 +19,22 @@ from homeassistant.const import (
     MAJOR_VERSION,
     Platform,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant
+from homeassistant.helpers.event import async_track_time_interval
 
-from .const import CONF_DEVICE, DOMAIN
+from .const import (
+    CONF_DEVICE,
+    CONF_SYNC_ZONE_INTERVAL,
+    DEFAULT_SYNC_ZONE_INTERVAL,
+    DOMAIN,
+)
 from .coordinator import DawarichStatsCoordinator, DawarichVersionCoordinator
 from .helpers import get_api
+from .zone_sync import async_sync_zones, is_auto_sync_enabled
 
 VERSION = json.loads((Path(__file__).parent / "manifest.json").read_text())["version"]
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +48,8 @@ class DawarichConfigEntryData:
     api: DawarichAPI
     coordinator: DawarichStatsCoordinator
     version_coordinator: DawarichVersionCoordinator
+    zone_sync_unsub: CALLBACK_TYPE | None = None
+    options_unsub: CALLBACK_TYPE | None = None
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: DawarichConfigEntry) -> bool:
@@ -67,6 +78,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: DawarichConfigEntry) -> 
     entry.runtime_data = DawarichConfigEntryData(
         api=api, coordinator=coordinator, version_coordinator=version_coordinator
     )
+    entry.runtime_data.options_unsub = entry.add_update_listener(_async_update_listener)
+
+    if is_auto_sync_enabled(entry):
+        interval_hours = int(
+            entry.options.get(
+                CONF_SYNC_ZONE_INTERVAL,
+                entry.data.get(CONF_SYNC_ZONE_INTERVAL, DEFAULT_SYNC_ZONE_INTERVAL),
+            )
+        )
+
+        async def _async_sync_zones_periodically(_: Any) -> None:
+            await async_sync_zones(hass, entry)
+
+        entry.runtime_data.zone_sync_unsub = async_track_time_interval(
+            hass,
+            _async_sync_zones_periodically,
+            timedelta(hours=interval_hours),
+        )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -79,9 +108,20 @@ async def async_unload_entry(
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
+        if entry.runtime_data.zone_sync_unsub is not None:
+            entry.runtime_data.zone_sync_unsub()
+        if entry.runtime_data.options_unsub is not None:
+            entry.runtime_data.options_unsub()
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok
+
+
+async def _async_update_listener(
+    hass: HomeAssistant, entry: config_entries.ConfigEntry
+) -> None:
+    """Reload the entry when options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 # Migration from 1 to 2

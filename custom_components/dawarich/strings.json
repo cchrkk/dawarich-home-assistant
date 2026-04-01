@@ -10,7 +10,10 @@
           "name": "Name",
           "mobile_app": "Tracked Entity",
           "ssl": "Use SSL (i.e. https)",
-          "verify_ssl": "Verify SSL"
+          "verify_ssl": "Verify SSL",
+          "auto_sync_zones": "Enable automatic zone sync",
+          "sync_zone_interval": "Zone sync interval (hours)",
+          "sync_zones": "Zones to sync"
         }
       },
       "api_key": {
@@ -37,7 +40,19 @@
           "mobile_app": "Tracked Entity",
           "ssl": "Use SSL (i.e. https)",
           "verify_ssl": "Verify SSL",
+          "auto_sync_zones": "Enable automatic zone sync",
+          "sync_zone_interval": "Zone sync interval (hours)",
+          "sync_zones": "Zones to sync",
           "api_key": "API Key (leave empty to keep current)"
+        }
+      },
+      "init": {
+        "title": "Dawarich Options",
+        "description": "Choose whether zone sync should run automatically and which Home Assistant zones should be sent to Dawarich.",
+        "data": {
+          "auto_sync_zones": "Enable automatic zone sync",
+          "sync_zone_interval": "Zone sync interval (hours)",
+          "sync_zones": "Zones to sync"
         }
       }
     },
@@ -50,6 +65,13 @@
       "reconfigure_failed": "Failed to reconfigure the integration.",
       "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]",
       "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]"
+    }
+  },
+  "entity": {
+    "button": {
+      "sync_zones": {
+        "name": "Sync Home Assistant Zones"
+      }
     }
   },
   "issues": {
