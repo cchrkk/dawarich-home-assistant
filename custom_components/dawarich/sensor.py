@@ -1,8 +1,10 @@
 """Show statistical data from your Dawarich instance."""
 
 import logging
+from typing import TYPE_CHECKING
 
 from dawarich_api import DawarichAPI
+from homeassistant import config_entries
 from homeassistant.components.device_tracker.const import SourceType
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.components.sensor.const import SensorDeviceClass, SensorStateClass
@@ -28,10 +30,11 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
 )
 
-from custom_components.dawarich import DawarichConfigEntry
-
 from .const import CONF_DEVICE, DOMAIN, DawarichTrackerStates
 from .coordinator import DawarichStatsCoordinator, DawarichVersionCoordinator
+
+if TYPE_CHECKING:
+    from custom_components.dawarich import DawarichConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,7 +93,7 @@ type DawarichSensors = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: DawarichConfigEntry,
+    entry: config_entries.ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ):
     """Set up Dawarich sensor."""

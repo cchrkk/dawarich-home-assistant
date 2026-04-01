@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from aiohttp import ClientResponseError
+from homeassistant import config_entries
 from homeassistant.const import CONF_API_KEY, CONF_HOST, CONF_SSL, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
-from custom_components.dawarich import DawarichConfigEntry
 
 from .helpers import (
     DawarichArea,
@@ -25,10 +25,13 @@ from .const import (
     CONF_SYNC_ZONES,
 )
 
+if TYPE_CHECKING:
+    from custom_components.dawarich import DawarichConfigEntry
+
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_selected_zone_entity_ids(entry: DawarichConfigEntry) -> set[str]:
+def get_selected_zone_entity_ids(entry: config_entries.ConfigEntry) -> set[str]:
     """Return the configured zone entity ids, or an empty set for all zones."""
     configured_zones = entry.options.get(
         CONF_SYNC_ZONES, entry.data.get(CONF_SYNC_ZONES, [])
@@ -58,7 +61,7 @@ def collect_home_assistant_zones(
 
 async def async_sync_zones(
     hass: HomeAssistant,
-    entry: DawarichConfigEntry,
+    entry: config_entries.ConfigEntry,
 ) -> tuple[int, int, int]:
     """Synchronize Home Assistant zones to Dawarich."""
     session = async_get_clientsession(hass)
@@ -111,7 +114,7 @@ async def async_sync_zones(
     return created_count, updated_count, skipped_count
 
 
-def is_auto_sync_enabled(entry: DawarichConfigEntry) -> bool:
+def is_auto_sync_enabled(entry: config_entries.ConfigEntry) -> bool:
     """Return whether periodic zone sync is enabled."""
     return bool(
         entry.options.get(CONF_AUTO_SYNC_ZONES, entry.data.get(CONF_AUTO_SYNC_ZONES, False))

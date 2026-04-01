@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
+from homeassistant import config_entries
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from custom_components.dawarich import DawarichConfigEntry
-
 from .const import DOMAIN
 from .zone_sync import async_sync_zones
+
+if TYPE_CHECKING:
+    from custom_components.dawarich import DawarichConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +30,7 @@ SYNC_ZONES_BUTTON = ButtonEntityDescription(
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: DawarichConfigEntry,
+    entry: config_entries.ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Dawarich button entities."""
@@ -58,7 +61,7 @@ class DawarichSyncZonesButton(ButtonEntity):
 
     def __init__(
         self,
-        entry: DawarichConfigEntry,
+        entry: config_entries.ConfigEntry,
         description: ButtonEntityDescription,
         device_info: DeviceInfo,
     ) -> None:
